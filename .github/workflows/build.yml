@@ -6,6 +6,9 @@ on:
     tags: ['v*']
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   windows:
     runs-on: windows-latest
@@ -26,3 +29,12 @@ jobs:
           name: Halka-windows-x64
           path: |
             dist/*.exe
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Halka ${{ github.ref_name }}
+          body_path: .github/release-notes.md
+          files: |
+            dist/Halka-Setup-*.exe
+            dist/Halka-*-portable-*.exe
