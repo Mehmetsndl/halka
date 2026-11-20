@@ -1,0 +1,116 @@
+{
+  "name": "halka",
+  "productName": "Halka",
+  "version": "0.2.0",
+  "description": "A macOS-style radial menu around your cursor for Windows: clipboard shelves, file conversion and text tools in one shortcut.",
+  "main": "src/main.cjs",
+  "author": "Mehmet Şendil",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/core.test.cjs",
+    "capture": "electron . --capture",
+    "dist": "electron-builder --win nsis portable --x64 --publish never",
+    "dist:dir": "electron-builder --win dir --x64 --publish never",
+    "build:helper": "x86_64-w64-mingw32-gcc -O2 -Wall -municode -mconsole -static -s -o native/halka-helper.exe native/halka-helper.c -lole32 -loleaut32 -luuid -lshell32"
+  },
+  "dependencies": {
+    "jsqr": "^1.4.0",
+    "pdf-lib": "^1.17.1",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "electron": "^45.3.3",
+    "electron-builder": "^26.18.0",
+    "resedit": "^3.1.1"
+  },
+  "build": {
+    "appId": "app.halka.desktop",
+    "productName": "Halka",
+    "copyright": "Copyright © 2026 Mehmet Şendil",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*.cjs",
+      "!src/capture.cjs",
+      "!**/*.map",
+      "renderer/**/*",
+      "assets/**/*",
+      "package.json",
+      "LICENSE",
+      "!node_modules/pdf-lib/{es,src,ts3.4,dist}/**",
+      "!assets/tessdata/**",
+      "!node_modules/@tesseract.js-data/**",
+      "!node_modules/tesseract.js/dist/**",
+      "!node_modules/tesseract.js/{docs,examples,scripts}/**"
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "artifactName": "Halka-Setup-${version}-x64.${ext}",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
+    },
+    "portable": {
+      "artifactName": "Halka-${version}-portable-x64.${ext}"
+    },
+    "afterPack": "scripts/after-pack.mjs",
+    "electronLanguages": [
+      "tr",
+      "en-US"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Mehmetsndl",
+        "repo": "halka"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "native/halka-helper.exe",
+        "to": "halka-helper.exe"
+      },
+      {
+        "from": "LICENSE",
+        "to": "LICENSE.txt"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      },
+      {
+        "from": "assets/tessdata",
+        "to": "tessdata"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mehmetsndl/halka.git"
+  }
+}
