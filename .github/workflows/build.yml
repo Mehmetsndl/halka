@@ -1,0 +1,28 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Build helper
+        shell: bash
+        run: gcc -O2 -Wall -municode -mconsole -static -s -o native/halka-helper.exe native/halka-helper.c -lole32 -loleaut32 -luuid -lshell32
+      - run: npx electron-builder --win nsis portable --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Halka-windows-x64
+          path: |
+            dist/*.exe
