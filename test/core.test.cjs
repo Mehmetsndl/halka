@@ -76,7 +76,7 @@ test('text transforms', () => {
 });
 
 test('unique output names never overwrite', () => {
-  const existing = new Set(['/x/a.png', '/x/a (2).png']);
+  const existing = new Set([path.join('/x', 'a.png'), path.join('/x', 'a (2).png')]);
   assert.equal(fileTools.uniquePath('/x', 'a', '.png', (p) => existing.has(p)), path.join('/x', 'a (3).png'));
   assert.equal(fileTools.uniquePath('/x', 'b', '.png', () => false), path.join('/x', 'b.png'));
 });
