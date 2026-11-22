@@ -31,6 +31,10 @@ contextBridge.exposeInMainWorld('halka', {
   clearHistory: () => ipcRenderer.invoke('settings:clear-history'),
   openData: () => ipcRenderer.invoke('settings:open-data'),
   onSection: listen('settings:section'),
+  checkUpdate: () => ipcRenderer.invoke('update:check'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  openUrl: (url) => ipcRenderer.invoke('open:url', url),
+  onUpdateState: listen('update:state'),
   closeWindow: () => ipcRenderer.send('window:close'),
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
   // conversion worker

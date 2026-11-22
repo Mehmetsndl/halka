@@ -20,6 +20,7 @@ Halka, [Nashi](https://github.com/orkunisitmak/nashi-app)'nin dönüştürme ça
 | **Ekran al** | Windows Ekran Alıntısı'nı açar; görüntü otomatik olarak Pano rafına düşer. |
 | **QR oku** | Panodaki görseldeki QR kodu çözer ve metnini kopyalar. |
 | **Sabitler** | Yalnızca sabitlediğin öğeleri gösterir. |
+| **Alt + sürükle** | Alt'a basılı tutup herhangi bir pencerenin istediğin yerinden tutarak taşı (başlık çubuğu gerekmez). Büyütülmüş pencere sürüklenince küçülür. Tam ekran oyun/video pencerelerine dokunmaz. Ayarlar > Genel'den kapatılabilir. |
 | **Ayarlar** | Kısayollar, tema, vurgu rengi, halka boyutu, geçmiş süresi, dil. |
 
 **Kısayollar:** Halka `Ctrl+Alt+Space` · doğrudan pano `Ctrl+Alt+T` (ikisi de Ayarlar'dan değişir). Halka içinde: ok tuşları / Tab, `1–9`, `Enter`, `Esc`; harf yazınca panoda arama. Kısayolu basılı tutup imleci bir dilime götürüp bırakırsan o dilim çalışır.
@@ -38,6 +39,8 @@ Mouse tuşuna atamak için (Logitech Options, AutoHotkey vb.): `Halka.exe --ring
 ## Gizlilik
 
 Pano geçmişi yalnızca bu bilgisayarda, `%APPDATA%\Halka` altında saklanır. Parola yöneticilerinin "geçmişe ekleme" (`ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory = 0`) işaretli kopyaları kaydedilmez.
+
+Halka 6 saatte bir GitHub'daki [son sürüme](https://github.com/Mehmetsndl/halka/releases/latest) bakar (Ayarlar > Hakkında'dan kapatılabilir). Kurulumla yüklenen sürüm güncellemeyi arka planda indirir ve yeniden başlatınca kurar; portable sürüm yalnızca haber verir.
 
 Görsellerdeki yazı bilgisayarında okunur (tesseract.js, Türkçe + İngilizce modeller uygulamayla gelir). İnternete yalnızca sen bir çeviri başlattığında, yalnızca çevrilecek metin gönderilir: varsayılan olarak Google Çeviri'ye, istersen kendi anahtarınla DeepL'e (Ayarlar > Çeviri).
 

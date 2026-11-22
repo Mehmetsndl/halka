@@ -16,6 +16,7 @@
  *   desktop            selected paths on the desktop
  *   hasimage           1 when the clipboard holds PNG or bitmap data
  *   clipimage <path>   save the clipboard image (PNG, or CF_DIB as BMP) to a file
+ *   altdrag on|off     hold Alt and drag inside any window to move it
  *   ping
  *
  * Build: x86_64-w64-mingw32-gcc -O2 -municode -mconsole -o halka-helper.exe halka-helper.c -lole32 -loleaut32 -luuid -lshell32
@@ -292,9 +293,119 @@ static void desktopSelection(void) {
     put("}");
 }
 
+/* --------------------------------------------------------------- Alt+drag */
+/*
+ * Hold Alt and drag anywhere inside a window to move it (like AltDrag on Windows
+ * or Alt+drag on Linux desktops). A low-level mouse hook runs on its own thread
+ * with a message loop; the main thread keeps answering stdin requests.
+ */
+
+static HANDLE dragThread;
+static DWORD dragThreadId;
+static volatile LONG dragEnabled;
+static HWND dragWindow;
+static POINT dragOffset;
+static int dragActive;
+
+static int isShellWindow(HWND hwnd) {
+    wchar_t cls[64] = L"";
+    GetClassNameW(hwnd, cls, 64);
+    return hwnd == GetDesktopWindow() || hwnd == GetShellWindow()
+        || !wcscmp(cls, L"Progman") || !wcscmp(cls, L"WorkerW")
+        || !wcscmp(cls, L"Shell_TrayWnd") || !wcscmp(cls, L"Shell_SecondaryTrayWnd")
+        || !wcscmp(cls, L"Windows.UI.Core.CoreWindow") || !wcscmp(cls, L"XamlExplorerHostIslandWindow");
+}
+
+/* Borderless windows that cover their whole monitor are games/videos: leave them alone. */
+static int isFullscreen(HWND hwnd) {
+    RECT rect;
+    MONITORINFO info = { sizeof info };
+    if (!GetWindowRect(hwnd, &rect)) return 0;
+    if (!GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &info)) return 0;
+    LONG style = GetWindowLongW(hwnd, GWL_STYLE);
+    return !(style & WS_CAPTION) && EqualRect(&rect, &info.rcMonitor);
+}
+
+static void beginDrag(POINT pt) {
+    HWND hit = WindowFromPoint(pt);
+    HWND hwnd = hit ? GetAncestor(hit, GA_ROOT) : NULL;
+    if (!hwnd || isShellWindow(hwnd) || isFullscreen(hwnd) || !IsWindowVisible(hwnd)) return;
+    RECT rect;
+    if (IsZoomed(hwnd)) {
+        /* Restore a maximized window under the cursor, keeping the grab point proportional. */
+        WINDOWPLACEMENT placement = { sizeof placement };
+        GetWindowRect(hwnd, &rect);
+        double fx = rect.right > rect.left ? (double)(pt.x - rect.left) / (rect.right - rect.left) : 0.5;
+        GetWindowPlacement(hwnd, &placement);
+        int width = placement.rcNormalPosition.right - placement.rcNormalPosition.left;
+        int height = placement.rcNormalPosition.bottom - placement.rcNormalPosition.top;
+        ShowWindow(hwnd, SW_RESTORE);
+        int x = pt.x - (int)(fx * width);
+        int y = pt.y - 12;
+        SetWindowPos(hwnd, NULL, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    if (!GetWindowRect(hwnd, &rect)) return;
+    dragWindow = hwnd;
+    dragOffset.x = pt.x - rect.left;
+    dragOffset.y = pt.y - rect.top;
+    dragActive = 1;
+    /* An unassigned key press keeps the app from opening its menu bar when Alt is released. */
+    key(0xE8, 0);
+    key(0xE8, 1);
+}
+
+static LRESULT CALLBACK mouseHook(int code, WPARAM wParam, LPARAM lParam) {
+    if (code == HC_ACTION && dragEnabled) {
+        const MSLLHOOKSTRUCT *info = (const MSLLHOOKSTRUCT *)lParam;
+        int injected = (info->flags & LLMHF_INJECTED) != 0;
+        if (wParam == WM_LBUTTONDOWN && !injected && !dragActive) {
+            int alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+            int others = (GetAsyncKeyState(VK_CONTROL) & 0x8000) || (GetAsyncKeyState(VK_LWIN) & 0x8000) || (GetAsyncKeyState(VK_RWIN) & 0x8000);
+            if (alt && !others) {
+                beginDrag(info->pt);
+                if (dragActive) return 1; /* swallow the click */
+            }
+        } else if (wParam == WM_MOUSEMOVE && dragActive) {
+            SetWindowPos(dragWindow, NULL, info->pt.x - dragOffset.x, info->pt.y - dragOffset.y, 0, 0,
+                         SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+        } else if (wParam == WM_LBUTTONUP && dragActive) {
+            dragActive = 0;
+            dragWindow = NULL;
+            return 1;
+        }
+    }
+    return CallNextHookEx(NULL, code, wParam, lParam);
+}
+
+static DWORD WINAPI dragLoop(LPVOID unused) {
+    (void)unused;
+    HHOOK hook = SetWindowsHookExW(WH_MOUSE_LL, mouseHook, GetModuleHandleW(NULL), 0);
+    MSG msg;
+    while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+    if (hook) UnhookWindowsHookEx(hook);
+    return 0;
+}
+
+static void setAltDrag(int on) {
+    InterlockedExchange(&dragEnabled, on);
+    if (on && !dragThread) dragThread = CreateThread(NULL, 0, dragLoop, NULL, 0, &dragThreadId);
+}
+
+/* Per-monitor DPI awareness so hook coordinates and SetWindowPos agree on mixed-DPI setups. */
+static void enableDpiAwareness(void) {
+    typedef BOOL (WINAPI *SetContextFn)(HANDLE);
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    SetContextFn set = user32 ? (SetContextFn)(void *)GetProcAddress(user32, "SetProcessDpiAwarenessContext") : NULL;
+    if (!set || !set((HANDLE)-4 /* PER_MONITOR_AWARE_V2 */)) SetProcessDPIAware();
+}
+
 /* ------------------------------------------------------------------ main */
 
 int wmain(void) {
+    enableDpiAwareness();
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     SetConsoleOutputCP(CP_UTF8);
     char line[1024];
@@ -345,6 +456,9 @@ int wmain(void) {
         } else if (!strcmp(cmd, "clipimage")) {
             const char *kind = saveClipboardImage(arg);
             if (kind) { put("{\"ok\":true,\"format\":\""); put(kind); put("\"}"); } else put("{\"ok\":false}");
+        } else if (!strcmp(cmd, "altdrag")) {
+            setAltDrag(!strcmp(arg, "on"));
+            put(dragEnabled ? "{\"altdrag\":true}" : "{\"altdrag\":false}");
         } else if (!strcmp(cmd, "ping")) {
             put("{\"pong\":true}");
         } else {

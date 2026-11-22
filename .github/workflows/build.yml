@@ -45,3 +45,5 @@ jobs:
           files: |
             dist/Halka-Setup-*.exe
             dist/Halka-*-portable-*.exe
+            dist/latest.yml
+            dist/*.blockmap

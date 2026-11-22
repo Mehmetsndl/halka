@@ -133,6 +133,7 @@ function build() {
     el('div', { class: 'group' },
       row(t('settings.launch'), toggle('launchAtLogin')),
       row(t('settings.release'), toggle('releaseToSelect'), t('settings.releaseHint')),
+      row(t('settings.altDrag'), toggle('altDrag'), t('settings.altDragHint')),
       row(t('settings.sounds'), toggle('sounds')),
       row(t('settings.language'), select('language', [['auto', t('settings.languageAuto')], ['tr', 'Türkçe'], ['en', 'English']])))));
 
@@ -188,9 +189,50 @@ function build() {
       el('h2', {}, 'Halka'),
       el('div', { class: 'ver' }, t('settings.version', { v: ui.version })),
       el('p', {}, t('settings.aboutText')),
-      el('button', { class: 'btn', onclick: () => api.openData() }, t('settings.data')))));
+      el('div', { class: 'update-line', id: 'update-line' }),
+      el('div', { class: 'about-buttons' },
+        el('button', { class: 'btn', id: 'update-btn', onclick: () => checkUpdate() }, t('update.check')),
+        el('button', { class: 'btn', onclick: () => api.openData() }, t('settings.data')))),
+    el('div', { class: 'group' }, row(t('update.auto'), toggle('autoUpdate'), t('update.autoHint', { repo: (ui.update && ui.update.repo) || 'Mehmetsndl/halka' })))));
+  paintUpdate();
 
   show(current);
+}
+
+function updateText(u) {
+  if (!u) return '';
+  switch (u.status) {
+    case 'checking': return t('update.checking');
+    case 'latest': return '✓ ' + t('update.latest');
+    case 'available': return t('update.available', { v: u.latest });
+    case 'downloading': return t('update.downloading', { v: u.latest || '', p: u.progress || 0 });
+    case 'ready': return t('update.ready', { v: u.latest });
+    case 'error': return t('update.error', { e: u.error || '' });
+    case 'dev': return t('update.dev');
+    default: return '';
+  }
+}
+
+function paintUpdate() {
+  const line = document.getElementById('update-line');
+  const button = document.getElementById('update-btn');
+  if (!line || !button) return;
+  const u = ui.update;
+  line.textContent = updateText(u);
+  line.className = `update-line ${u ? u.status : ''}`;
+  button.textContent = u && u.status === 'ready' ? t('update.restart') : u && u.status === 'available' ? t('update.download') : t('update.check');
+  button.disabled = Boolean(u && ['checking', 'downloading'].includes(u.status));
+}
+
+async function checkUpdate() {
+  const u = ui.update;
+  if (u && u.status === 'ready') return api.installUpdate();
+  if (u && u.status === 'available' && u.url) return api.openUrl(u.url);
+  ui.update = { ...(u || {}), status: 'checking' };
+  paintUpdate();
+  const state = await api.checkUpdate();
+  if (state) ui.update = state;
+  paintUpdate();
 }
 
 function show(id) {
@@ -223,6 +265,7 @@ document.getElementById('btn-close').addEventListener('click', () => api.closeWi
 document.getElementById('btn-min').addEventListener('click', () => api.minimizeWindow());
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !document.querySelector('.recorder.recording')) api.closeWindow(); });
 api.onSection((id) => show(id));
+api.onUpdateState((state) => { ui.update = state; paintUpdate(); });
 api.onSettings((payload) => { ui = { ...ui, ...payload }; apply(); });
 
 api.getSettings().then((payload) => {

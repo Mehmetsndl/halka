@@ -17,6 +17,7 @@ let buffer = '';
 let nextId = 1;
 const pending = new Map();
 let failures = 0;
+let altDragWanted = false;
 
 function helperPath() {
   const candidates = [
@@ -58,6 +59,8 @@ function start() {
   child.on('exit', reset);
   child.on('error', (error) => { console.error('[halka] helper failed', error.message); reset(); });
   child.stdin.on('error', () => {});
+  // A restarted helper must get the Alt+drag state again.
+  if (altDragWanted) child.stdin.write(`0 altdrag on\n`);
   return true;
 }
 
@@ -120,6 +123,13 @@ async function saveClipboardImage(file) {
   return result && result.ok ? result.format : null;
 }
 
+/** Hold Alt and drag inside any window to move it. */
+async function setAltDrag(on) {
+  altDragWanted = Boolean(on);
+  const result = await call('altdrag', on ? 'on' : 'off');
+  return Boolean(result && result.altdrag);
+}
+
 function stop() {
   if (child) { child.stdin.end(); child.kill(); }
   child = null;
@@ -140,6 +150,7 @@ module.exports = {
   desktopSelection,
   saveClipboardImage,
   clipboardHasImage,
+  setAltDrag,
   stop,
   isExplorer: (cls) => EXPLORER_CLASSES.has(cls),
   isDesktop: (cls) => DESKTOP_CLASSES.has(cls)
