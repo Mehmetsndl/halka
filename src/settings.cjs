@@ -17,6 +17,8 @@ const DEFAULTS = Object.freeze({
   captureLinks: true,
   retentionDays: 30,
   paused: false,
+  altDrag: true,
+  autoUpdate: true,
   translateTarget: 'auto',
   translateFallback: 'en',
   translateProvider: 'google',

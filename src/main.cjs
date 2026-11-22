@@ -16,6 +16,7 @@ const textTools = require('./text-tools.cjs');
 const fileTools = require('./file-tools.cjs');
 const translator = require('./translate.cjs');
 const ocr = require('./ocr.cjs');
+const { Updater } = require('./updater.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const RENDERER = path.join(ROOT, 'renderer');
@@ -56,6 +57,7 @@ let strings = locales.en;
 let context = null; // what was in front when the ring opened
 let overlayReady = false;
 let quitting = false;
+let updater = null;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const t = (key, values) => locales.format(strings[key] ?? key, values);
@@ -648,11 +650,15 @@ function registerIpc() {
     if (action.kind === 'reveal') shell.showItemInFolder(action.value);
     else if (action.kind === 'open') shell.openPath(action.value);
     else if (action.kind === 'url' && /^https?:\/\//i.test(action.value)) shell.openExternal(action.value);
+    else if (action.kind === 'restart' && updater) updater.install();
     toast.webContents.send('toast:hide');
   });
   ipcMain.on('toast:hidden', () => toast.hide());
 
-  ipcMain.handle('settings:get', () => ({ ...uiState(), hotkeyStatus, dataPath: app.getPath('userData') }));
+  ipcMain.handle('settings:get', () => ({ ...uiState(), hotkeyStatus, dataPath: app.getPath('userData'), update: updater ? updater.state : null }));
+  ipcMain.handle('update:check', () => (updater ? updater.check({ silent: false }) : null));
+  ipcMain.handle('update:install', () => updater && updater.install());
+  ipcMain.handle('open:url', (_event, url) => { if (/^https:\/\//i.test(String(url))) shell.openExternal(url); });
   ipcMain.handle('settings:set', (_event, partial) => applySettings(partial));
   ipcMain.handle('settings:recording', (_event, recording) => { if (recording) globalShortcut.unregisterAll(); else registerHotkeys(); });
   ipcMain.handle('settings:clear-history', () => store.clear(true));
@@ -689,6 +695,8 @@ function applySettings(partial) {
   if (before.retentionDays !== after.retentionDays) store.configure({ retentionDays: after.retentionDays });
   if (before.launchAtLogin !== after.launchAtLogin) applyLoginItem();
   if (before.paused !== after.paused) buildTray();
+  if (before.altDrag !== after.altDrag) win32.setAltDrag(after.altDrag);
+  if (!before.autoUpdate && after.autoUpdate && updater) updater.check({ silent: true });
   broadcast('halka:settings', uiState());
   return { ...uiState(), hotkeyStatus };
 }
@@ -715,6 +723,7 @@ function buildTray() {
     { type: 'separator' },
     { label: t('tray.pause'), type: 'checkbox', checked: settings.get('paused'), click: (item) => applySettings({ paused: item.checked }) },
     { label: t('tray.settings'), click: () => openSettings() },
+    { label: t('update.check'), click: () => { openSettings('about'); if (updater) updater.check({ silent: false }); } },
     { type: 'separator' },
     { label: t('tray.quit'), click: () => { quitting = true; app.quit(); } }
   ]));
@@ -767,6 +776,7 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   clearInterval(watchTimer);
   win32.stop();
+  if (updater) updater.stop();
   ocr.stop();
   if (store) store.flush();
 });
@@ -801,6 +811,21 @@ app.whenReady().then(async () => {
   registerHotkeys();
   applyLoginItem();
   startWatcher();
+  win32.setAltDrag(settings.get('altDrag'));
+  updater = new Updater({
+    app,
+    fetch: (url, options) => net.fetch(url, options),
+    isEnabled: () => settings.get('autoUpdate'),
+    onState: (state) => { if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.webContents.send('update:state', state); },
+    notify: (kind, info) => {
+      if (kind === 'ready') {
+        showToast({ title: t('update.ready', { v: info.version }), body: t('update.readyBody'), tone: 'success', actions: [{ label: t('update.restart'), kind: 'restart' }], duration: 15000 });
+      } else {
+        showToast({ title: t('update.available', { v: info.version }), body: t('update.availableBody'), actions: [{ label: t('update.download'), kind: 'url', value: info.url }], duration: 15000 });
+      }
+    }
+  });
+  updater.start();
 
   if (process.argv.includes('--self-test')) setTimeout(selfTest, 2500);
 

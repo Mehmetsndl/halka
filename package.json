@@ -1,7 +1,7 @@
 {
   "name": "halka",
   "productName": "Halka",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A macOS-style radial menu around your cursor for Windows: clipboard shelves, file conversion and text tools in one shortcut.",
   "main": "src/main.cjs",
   "author": "Mehmet Şendil",
@@ -16,6 +16,7 @@
     "build:helper": "x86_64-w64-mingw32-gcc -O2 -Wall -municode -mconsole -static -s -o native/halka-helper.exe native/halka-helper.c -lole32 -loleaut32 -luuid -lshell32"
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "jsqr": "^1.4.0",
     "pdf-lib": "^1.17.1",
     "tesseract.js": "^7.0.0"

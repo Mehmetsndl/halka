@@ -174,3 +174,46 @@ test('DeepL uses the free endpoint for :fx keys and reports errors', async () =>
   await assert.rejects(translator.translate('Hello', { target: 'tr', provider: 'deepl', key: '', fetch }));
   await assert.rejects(translator.translate('Hello', { target: 'tr', fetch: async () => ({ ok: false, status: 429 }) }), /429/);
 });
+
+const updaterModule = require('../src/updater.cjs');
+
+test('version comparison', () => {
+  const { compareVersions: c } = updaterModule;
+  assert.equal(c('0.3.0', '0.2.0'), 1);
+  assert.equal(c('v0.10.0', '0.9.9'), 1);
+  assert.equal(c('0.2.0', '0.2.0'), 0);
+  assert.equal(c('0.2', '0.2.0'), 0);
+  assert.equal(c('0.3.0-beta.1', '0.3.0'), -1);
+  assert.equal(c('0.2.1', '0.3.0'), -1);
+});
+
+test('latest GitHub release is read from the API', async () => {
+  const { latestRelease, REPO } = updaterModule;
+  assert.equal(REPO, 'Mehmetsndl/halka');
+  let asked;
+  const fetch = async (url) => { asked = url; return { ok: true, status: 200, json: async () => ({ tag_name: 'v0.3.0', html_url: 'https://github.com/Mehmetsndl/halka/releases/tag/v0.3.0', body: 'notes', assets: [{ name: 'Halka-Setup-0.3.0-x64.exe', browser_download_url: 'https://x/setup.exe' }, { name: 'Halka-0.3.0-portable-x64.exe', browser_download_url: 'https://x/portable.exe' }] }) }; };
+  const release = await latestRelease(fetch);
+  assert.equal(asked, 'https://api.github.com/repos/Mehmetsndl/halka/releases/latest');
+  assert.deepEqual({ v: release.version, p: release.portableUrl }, { v: '0.3.0', p: 'https://x/portable.exe' });
+  assert.equal(await latestRelease(async () => ({ ok: false, status: 404 })), null);
+  await assert.rejects(latestRelease(async () => ({ ok: false, status: 403 })), /403/);
+});
+
+test('portable builds announce a newer release once', async () => {
+  const { Updater } = updaterModule;
+  const notes = [];
+  const app = { isPackaged: true, getVersion: () => '0.2.0' };
+  process.env.PORTABLE_EXECUTABLE_FILE = 'C:\\Halka.exe';
+  const u = new Updater({ app, notify: (kind, info) => notes.push([kind, info.version]), fetch: async () => ({ ok: true, status: 200, json: async () => ({ tag_name: 'v0.3.0', html_url: 'https://h', assets: [] }) }) });
+  await u.check({ silent: true });
+  await u.check({ silent: true });
+  delete process.env.PORTABLE_EXECUTABLE_FILE;
+  assert.equal(u.state.status, 'available');
+  assert.equal(u.state.latest, '0.3.0');
+  assert.deepEqual(notes, [['available', '0.3.0']]);
+  const same = new Updater({ app, notify: () => notes.push('x'), fetch: async () => ({ ok: true, status: 200, json: async () => ({ tag_name: 'v0.2.0', assets: [] }) }) });
+  process.env.PORTABLE_EXECUTABLE_FILE = 'C:\\Halka.exe';
+  await same.check();
+  delete process.env.PORTABLE_EXECUTABLE_FILE;
+  assert.equal(same.state.status, 'latest');
+});
